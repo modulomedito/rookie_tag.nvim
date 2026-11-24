@@ -108,9 +108,11 @@ function M.search_global_tags()
     end
     table.sort(taglist)
 
-    local pattern = "^#" .. table.concat(taglist, ".*#")
-    vim.api.nvim_echo({{'Searching tags: ' .. pattern, 'Normal'}}, false, {})
+    vim.api.nvim_echo({{'Searching tags: ' .. table.concat(taglist, ', '), 'Normal'}}, false, {})
 
+    -- Find candidate lines containing any requested tag, then keep only lines
+    -- containing all of them, in any order and at any position on the line.
+    local pattern = "#(" .. table.concat(taglist, "|") .. ")"
     local cmd = { "rg", "--vimgrep", "--color=never", pattern }
     local output = vim.fn.systemlist(cmd)
 
@@ -131,10 +133,22 @@ function M.search_global_tags()
     local merged = {}
     for _, entry in ipairs(qf) do
         local key = entry.bufnr .. ':' .. entry.lnum
-        if not seen[key] then
+        local has_all_tags = true
+        for _, tag in ipairs(taglist) do
+            if not string.find(entry.text, "#" .. tag, 1, true) then
+                has_all_tags = false
+                break
+            end
+        end
+        if has_all_tags and not seen[key] then
             seen[key] = true
             table.insert(merged, entry)
         end
+    end
+
+    if #merged == 0 then
+        vim.api.nvim_echo({{' -------> No matching lines found.', 'Normal'}}, false, {})
+        return
     end
 
     if #merged == 1 then
